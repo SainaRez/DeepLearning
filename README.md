@@ -1,3 +1,3 @@
 # DeepLearning
 
-This file uses the MNSIT hadnwritten digit data
+This file uses the MNIST hadnwritten digit data
