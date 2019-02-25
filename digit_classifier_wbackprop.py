@@ -53,17 +53,9 @@ def compute_dyhat_dh(layer):
 def relu_prime(layer, activation_list):
     a = activation_list[layer]
     return np.where(a < 0, 0, 1)
-    
-    
-    """if a <= 0:
-        dh_dz = 0
-    else:
-        dh_dz = 1
-    return dh_dz
-    """
 
 def compute_dz_dw(layer_num, activation_list):
-    dz_dw = activation_list[layer_num - 1]
+    dz_dw = activation_list[layer_num]
     return dz_dw
 
 def compute_dz_db(layer_num):
@@ -80,21 +72,7 @@ def forward(weights, biases, training_data):
         activation_list.append(activation)
         i = i + 1
     yhat = calc_softmax(weights[len(weights)-1], activation, biases[len(biases)-1])
-    print "all the activations"
-    print activation_list[0].shape
-    print activation_list[1].shape
-    print activation_list[2].shape
-    print activation_list[3].shape
     return yhat, activation_list
-
-
-"""
-def backward(labels, yhat, layer, activation_list):
-    dL_dz = compute_dL_dyhat(labels, yhat) * compute_dyhat_dh(layer) * compute_dh_dz(layer, activation_list)
-    dL_dw = dL_dz * compute_dz_dw(layer, activation_list)
-    dL_db = dL_dz * compute_dz_db(layer)
-    return dL_dw, dL_db
-"""
 
 
 
@@ -168,11 +146,11 @@ def train(training_data, training_labels, layer_count, unit_count, batch_size, a
 # Approach 2: #########################3
 
 def train(training_data, training_labels, layer_count, unit_count, batch_size, alpha):
-    layer_index = layer_count - 1
-    weights = init_weights(layer_index, unit_count, training_labels)
-    print "weight size", len(weights)   
-    biases = init_bias(layer_index, unit_count, training_labels)
-    print "bias size", len(biases)
+    input_hidden_layers = layer_count - 1
+    weights = init_weights(input_hidden_layers, unit_count, training_labels)
+    #print "weight size", len(weights)   
+    biases = init_bias(input_hidden_layers, unit_count, training_labels)
+    #print "bias size", len(biases)
     epsilon = 0.1
     data_size = training_data.shape[0]
     random_indexes = np.random.choice(data_size, data_size, replace=False)
@@ -187,24 +165,52 @@ def train(training_data, training_labels, layer_count, unit_count, batch_size, a
 
             #Performing forward 
             yhat, activation_list = forward(weights, biases, data_batch)
-            print "size of activation list", len(activation_list)
+            #print "size of activation list", len(activation_list)
 
             #Perfoming backward
             #g = compute_dL_dyhat(label_batch, yhat)
+            delta_w = []
+            delta_b = []
             g = yhat - label_batch
             #g = np.dot(compute_dz_dw(layer_index, activation_list).T, g)
-            dL_dw = np.dot(g, compute_dz_dw(layer_index, activation_list))
-            dL_db = g
-            weights[layer_index]
-            print "dimension of g", g.shape
-            j = layer_index - 1
-            while j >= 1: # Starting from one before last layer
-                print "shape of relu prime", relu_prime(j, activation_list).shape
-                g = np.dot(g, weights[j]) * relu_prime(j, activation_list)
-                dL_dw = np.dot(g, compute_dz_dw(j, activation_list))
-                dL_db = g
-                weights[j] = weights[j] - (dL_dw * alpha)
-                biases[j] = biases[j] - (dL_db * alpha)
+            dL_dw = np.dot(g.T, compute_dz_dw(input_hidden_layers-1, activation_list))
+            dL_db = np.mean(g, axis=0)
+            delta_w.append(dL_dw)
+            delta_b.append(dL_db)
+            #weights[input_hidden_layers-1] -= epsilon * dL_dw.T
+            #biases[input_hidden_layers-1] -= epsilon * dL_db
+            #print "first weight shape", weights[input_hidden_layers-1].shape
+            #print "dimension of g", g.shape
+            j = input_hidden_layers-1
+            while j >= 0: # Starting from one before last layer
+                #print "j", j
+                #print "shape of relu prime", relu_prime(j-1, activation_list).shape
+                #print "w shape", weights[j].shape
+                g = np.dot(g, weights[j].T) * relu_prime(j-1, activation_list)
+                #print "g shape", g.shape
+                dL_dw = np.dot(g.T, activation_list[j-1])
+                dL_db = np.mean(g, axis=0)
+                delta_w.append(dL_dw)
+                delta_b.append(dL_db)
+                #weights[j-1] = weights[j-1] - (dL_dw.T * epsilon)
+                #biases[j-1] = biases[j-1] - (dL_db * epsilon)
+                print np.linalg.norm(weights[j-1])
+                j = j - 1
+            
+            k = 0
+            for k in range(len(weights)):
+                weights[k] -= epsilon * delta_w[len(weights)-1-k]
+                biases[k] -= epsilon * delta_w[len(biases)-1-k]
+
+            i = i + 1
+
+        epoch = epoch + 1
+    
+    return weights, biases
+
+        
+
+
 
             
 
