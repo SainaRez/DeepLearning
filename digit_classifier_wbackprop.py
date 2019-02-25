@@ -39,13 +39,15 @@ def relu_prime(layer, activation_list):
     return np.where(a < 0, 0, 1)
 
 
-# The cross-entropy loss function 
-# Inputs: wights w (784x10), input data, labels, alpha: regularization constant,  Output: j: the cost value
 def loss(training_labels, yhat):
     j = training_labels * np.log(yhat)
     j = np.mean(j) * (0.5) * (-1)
     #j = j + ((alpha * 0.5) * np.sum(np.dot(w,w.T)))
     return j
+
+
+# Partial Derivatives for chain rule
+####################################
 
 def compute_dL_dyhat(training_labels, yhat):
     dL_dyhat = (1/(training_labels.shape[0] * 0.5)) * (training_labels/yhat)
@@ -63,6 +65,8 @@ def compute_dz_dw(layer_num, activation_list):
 def compute_dz_db(layer_num):
     dz_db = biases[layer_num]
     return dz_db
+    
+####################################
 
 
 def forward(weights, biases, training_data):
@@ -102,6 +106,10 @@ def init_weights(input_hidden_layers, unit_count, training_labels):
 
 
 def init_biases(input_hidden_layers, unit_count, training_labels):
+    """
+    Input: number of hidden layers + input layer, number of hidden units, labels
+    Output: A list of biases with the same length as weights all initialized to zeros. Last bias is a vector of 10 and the rest of vectors of the number of hidden units
+    """
     biases = []
     cons = (1/unit_count) ** 0.4
     last_b = cons * np.zeros(training_labels.shape[1])
@@ -113,6 +121,13 @@ def init_biases(input_hidden_layers, unit_count, training_labels):
 
 
 def backward(weights, biases, input_hidden_layers, batch_size, yhat, activation_list, input_data, labels):
+    """
+    This function initializes g for the last layer (output layer). g is the derivative of loss function with respect to yhat (predictions). It calculates dL_dw and dL_db for the out layer
+    then it calculates them for the rest of the layers by multipllying g with the derivative of activations with respect to z. 
+    Input: The initialized weights and biases, number of hidden layers + input layer, batch size, list of activation matrices, input data and labels
+    Output: delta w: The list of derivatives of the loss function with respect to w (dL_dw)
+    delta b: delta b: The list of derivatives of the loss function with respect to b (dL_db), learning rate
+    """
     delta_w = []
     delta_b = []
     g = yhat - labels
@@ -133,6 +148,11 @@ def backward(weights, biases, input_hidden_layers, batch_size, yhat, activation_
 
 
 def update_variables(weights, biases, delta_w, delta_b, learning_rate):
+    """
+    Input: List of weights, list of biases, delta w: The list of derivatives of the loss function with respect to w (dL_dw),
+    delta b: The list of derivatives of the loss function with respect to b (dL_db), learning rate
+    Output: The updated weights and biases
+    """
     k = 0
     for k in range(len(weights)):
         weights[k] -= learning_rate * delta_w[len(weights)-1-k].T
@@ -141,6 +161,12 @@ def update_variables(weights, biases, delta_w, delta_b, learning_rate):
 
 
 def train(training_data, training_labels, layer_count, unit_count, batch_size, alpha):
+    """
+    This function devides the data into batches and runs forward and backward propogation for each batch and updates the weights and the biases. 
+    It repeats this process for the number of epochs
+    Input: input data, the labels, number of layers, number of hidden units, batch size, and step size
+    Output: the final matrices of updated weights and biases
+    """
     input_hidden_layers = layer_count - 1
     weights = init_weights(input_hidden_layers, unit_count, training_labels)
     #print "weight size", len(weights)   
@@ -268,25 +294,13 @@ def reportCosts (w, training_data, training_labels, validation_data, validation_
     print "Training cost: {}".format(loss(w, training_data, training_labels, alpha))
     print "Validation cost:  {}".format(loss(w, validation_data, validation_labels, alpha))
 
-# Takes in the weight that we got from training data when compared to training lebels and inputs that eight into softmax (z = wight * testing data)
-# Then compares the predicted results with the testing labels and if the highest value of each row (data instance) has the same inidex as the label then
-# increments the accuracy counter.
-# Inputs: wights w, testing data, testing labels,  Output: accuracy achieved from the model on test data 
-def accuracy_function(w, validation_data, validation_labels):
-    predictions = calc_softmax(w, testing_data)
-    accuracy_counter = 0.0
-    for row_index in range(len(predictions)):
-        if np.argmax(predictions[row_index]) == np.argmax(testing_labels[row_index]):
-            accuracy_counter += 1.0
-    accuracy = (accuracy_counter/testing_labels.shape[0]) * 100
-    print "accuracy:", accuracy, "%"
-    return accuracy
-
-
-
 
 
 def accuracy(weights, biases, testing_data, testing_labels):
+    """
+    Input: Initialized weights and biases, testing data, testing labels
+    Output: The calculated accuracy of predictions compared to the labels
+    """
     predictions, activation_lsit = forward(weights, biases, testing_data)
     accuracy_counter = 0.0
     for row_index in range(len(predictions)):
