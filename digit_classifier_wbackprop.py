@@ -12,8 +12,8 @@ import numpy as np
 
 def calc_softmax(w, activation_matrix, b):
     """  
-    Inputs: The list of weights with the length of the number of hidden layers + input layer. Last activation matrix (number ofsamples x hidden units), Biases for the output layer (10 x 1)
-    Output: (output layer yhat) probabilites of the digits (number of samples x 10)
+    Inputs: The list of weights with the length of the number of hidden layers + input layer. Last activation matrix (batch size x hidden units), Biases for the output layer (10 x 1)
+    Output: (output layer yhat) probabilites of the digits (batch size x 10)
     """
     z_data = np.dot(activation_matrix, w) + b
     yhat = (np.exp(z_data.T) / np.sum(np.exp(z_data), axis=1)).T
@@ -23,14 +23,18 @@ def calc_softmax(w, activation_matrix, b):
 def relu(w, training_data, b):
     """
     Inputs: w is the list of weights with the length of the number of hidden layers + input layer. 
-    Activation matrix from the layer before or input data(number of samples x hidden units(each sample size for input)), Biases for that layer (hidden units x 1)
-    Output: the activation matrix for that layer (number of samples x hidden units)
+    Activation matrix from the layer before or input data(batch size x hidden units(size of each data sample for input)), Biases for that layer (hidden units x 1)
+    Output: the activation matrix for that layer (batch size x hidden units)
     """
     z_data = np.dot(training_data, w) + b
     activation_matrix = np.maximum(z_data, 0)
     return activation_matrix
 
 def relu_prime(layer, activation_list):
+    """
+    Input: The layer backprop is on, list of activation matrices
+    Output: da_dz (dirivative of activation with respect to z) 
+    """
     a = activation_list[layer]
     return np.where(a < 0, 0, 1)
 
@@ -60,7 +64,13 @@ def compute_dz_db(layer_num):
     dz_db = biases[layer_num]
     return dz_db
 
+
 def forward(weights, biases, training_data):
+    """
+    This furnction performs forward propogation by applying relu to the input layer and the hidden layers and softmax to the last or ouput layer
+    Input: list of randomly initialized weights and zero initialized biases, data_batch
+    Output: predictions or output layer(batch size x 10), list of activation matrices (len = layers, each matrix is (batch size x hidden units))
+    """
     activation_list = [training_data]
     activation = relu(weights[0], training_data, biases[0])
     activation_list.append(activation)
@@ -74,6 +84,11 @@ def forward(weights, biases, training_data):
 
 
 def init_weights(input_hidden_layers, unit_count, training_labels):
+    """
+    Input: number of hidden layers + input layer, number of hidden units, labels
+    Outpu: A list of weights with the size of the layers where each matrix is initialized with random numbers. First weight is (size of data x hidden units), last weight is (hidden units x 10)
+    and the rest of the weights are (hidden units x hidden units)
+    """
     weights = []
     cons = (1/unit_count) ** 0.4
     first_w = cons * np.random.randn(training_data.shape[1], unit_count)
