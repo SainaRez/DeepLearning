@@ -8,6 +8,7 @@
 
 
 import numpy as np
+import math
 
 
 def calc_softmax(w, activation_matrix, b):
@@ -39,63 +40,40 @@ def relu_prime(layer, activation_list):
     return np.where(a < 0, 0, 1)
 
 
-def loss(training_labels, yhat):
-    j = training_labels * np.log(yhat)
-    j = np.mean(j) * (0.5) * (-1)
-    #j = j + ((alpha * 0.5) * np.sum(np.dot(w,w.T)))
-    return j
-
-
-# Partial Derivatives for chain rule
-####################################
-
-def compute_dL_dyhat(training_labels, yhat):
-    dL_dyhat = (1/(training_labels.shape[0] * 0.5)) * (training_labels/yhat)
-    return dL_dyhat
-
-def compute_dyhat_dh(layer):
-    w = weights[layer]
-    (yhat - training_labels).T * w
-    return w
-
-def compute_dz_dw(layer_num, activation_list):
-    dz_dw = activation_list[layer_num]
-    return dz_dw
-
-def compute_dz_db(layer_num):
-    dz_db = biases[layer_num]
-    return dz_db
-    
-####################################
-
-
 def forward(weights, biases, training_data):
     """
     This furnction performs forward propogation by applying relu to the input layer and the hidden layers and softmax to the last or ouput layer
     Input: list of randomly initialized weights and zero initialized biases, data_batch
-    Output: predictions or output layer(batch size x 10), list of activation matrices (len = layers, each matrix is (batch size x hidden units))
+    Output: predictions or output layer(batch size x 10), z: aw + b, list of activation matrices (len = layers, each matrix is (batch size x hidden units))
     """
     activation_list = [training_data]
-    activation = relu(weights[0], training_data, biases[0])
-    activation_list.append(activation)
-    i = 1
-    while i < len(weights)-1:
+    z = [training_data]
+
+    # activation = relu(weights[0], training_data, biases[0])
+    # activation_list.append(activation)
+    activation = training_data
+    for i in range(len(weights)-1):
+        z.append(activation.dot(weights[i])+biases[i])
         activation = relu(weights[i], activation, biases[i])
         activation_list.append(activation)
-        i = i + 1
+    
+    z.append(activation.dot(weights[-1]) + biases[-1])
     yhat = calc_softmax(weights[len(weights)-1], activation, biases[len(biases)-1])
-    return yhat, activation_list
+    activation_list.append(yhat)
+
+    return yhat, z, activation_list
 
 
-def init_weights(input_hidden_layers, unit_count, training_labels):
+
+def init_weights(num_inputs, input_hidden_layers, unit_count, training_labels):
     """
     Input: number of hidden layers + input layer, number of hidden units, labels
     Outpu: A list of weights with the size of the layers where each matrix is initialized with random numbers. First weight is (size of data x hidden units), last weight is (hidden units x 10)
     and the rest of the weights are (hidden units x hidden units)
     """
     weights = []
-    cons = (1/unit_count) ** 0.4
-    first_w = cons * np.random.randn(training_data.shape[1], unit_count)
+    cons = 0.1
+    first_w = cons * np.random.randn(num_inputs, unit_count)
     weights.append(first_w)
     last_w = cons * np.random.randn(unit_count, training_labels.shape[1])
     for i in range(input_hidden_layers - 2):
@@ -111,18 +89,17 @@ def init_biases(input_hidden_layers, unit_count, training_labels):
     Output: A list of biases with the same length as weights all initialized to zeros. Last bias is a vector of 10 and the rest of vectors of the number of hidden units
     """
     biases = []
-    cons = (1/unit_count) ** 0.4
-    last_b = cons * np.zeros(training_labels.shape[1])
-    for i in range(input_hidden_layers - 1):
-        b = cons * np.zeros(unit_count)
-        biases.append(b)
+    for _ in range(input_hidden_layers - 1): 
+        biases.append(np.zeros(unit_count))
+
+    last_b = np.zeros(training_labels.shape[1])
     biases.append(last_b)
     return biases
 
 
-def backward(weights, biases, input_hidden_layers, batch_size, yhat, activation_list, input_data, labels):
+def backward(weights, biases, input_hidden_layers, batch_size, yhat, activation_list, input_data, labels, z):
     """
-    This function initializes g for the last layer (output layer). g is the derivative of loss function with respect to yhat (predictions). It calculates dL_dw and dL_db for the out layer
+    This function initializes g for the last layer (output layer). g is the derivative of loss function with respect to yhat (predictions). It calculates dL_dw and dL_db for the out layer, z
     then it calculates them for the rest of the layers by multipllying g with the derivative of activations with respect to z. 
     Input: The initialized weights and biases, number of hidden layers + input layer, batch size, list of activation matrices, input data and labels
     Output: delta w: The list of derivatives of the loss function with respect to w (dL_dw)
@@ -131,19 +108,19 @@ def backward(weights, biases, input_hidden_layers, batch_size, yhat, activation_
     delta_w = []
     delta_b = []
     g = yhat - labels
-    #dL_dw = np.dot(g.T, compute_dz_dw(input_hidden_layers-1, activation_list))
-    dL_dw = (1/batch_size) *np.dot(g.T, activation_list[input_hidden_layers-1])
-    dL_db = np.mean(g, axis=0)
-    delta_w.append(dL_dw)
+
+    dL_dw = (1./batch_size) * np.dot(g.T, activation_list[-2])
+    dL_db = (1./batch_size) * g.sum(axis=0)
+    delta_w.append(1./batch_size * dL_dw)
     delta_b.append(dL_db)
-    j = input_hidden_layers-1
-    while j >= 1: # Starting from one before last layer
-        g = np.dot(g, weights[j].T) * relu_prime(j, activation_list)
-        dL_dw = (1/batch_size) * np.dot(g.T, activation_list[j-1])
-        dL_db = np.mean(g, axis=0)
+    for i in range(-1, -len(weights), -1):
+        g = np.dot(g, weights[i].T) * relu_prime(i-1, z)
+        dL_dw = (1./batch_size) * np.dot(g.T, activation_list[i-2])
+        dL_db = (1./batch_size) * g.sum(axis=0)
+        #dL_db = np.mean(g, axis=0)
         delta_w.append(dL_dw)
         delta_b.append(dL_db)
-        j = j - 1
+    
     return delta_w, delta_b
 
 
@@ -153,147 +130,53 @@ def update_variables(weights, biases, delta_w, delta_b, learning_rate):
     delta b: The list of derivatives of the loss function with respect to b (dL_db), learning rate
     Output: The updated weights and biases
     """
-    k = 0
+    delta_w = delta_w[::-1]
+    delta_b = delta_b[::-1]
     for k in range(len(weights)):
-        weights[k] -= learning_rate * delta_w[len(weights)-1-k].T
-        biases[k] -= learning_rate * delta_b[len(biases)-1-k]
+        weights[k] -= learning_rate * delta_w[k].T
+    for k in range(len(biases)):
+        biases[k] -= learning_rate * delta_b[k]
+    
     return weights, biases
 
 
-def train(training_data, training_labels, layer_count, unit_count, batch_size, alpha):
+def train(training_data, training_labels, layer_count, unit_count, batch_size):
     """
     This function devides the data into batches and runs forward and backward propogation for each batch and updates the weights and the biases. 
     It repeats this process for the number of epochs
-    Input: input data, the labels, number of layers, number of hidden units, batch size, and step size
+    Input: input data, the labels, number of layers, number of hidden units and batch size
     Output: the final matrices of updated weights and biases
     """
+    n, m = training_data.shape
     input_hidden_layers = layer_count - 1
-    weights = init_weights(input_hidden_layers, unit_count, training_labels)
-    #print "weight size", len(weights)   
+
+    # Initialize weights and biases
+    weights = init_weights(m, input_hidden_layers, unit_count, training_labels) 
     biases = init_biases(input_hidden_layers, unit_count, training_labels)
-    #print "bias size", len(biases)
-    epsilon = 0.01
+
+    epsilon = 0.1
     data_size = training_data.shape[0]
     random_indexes = np.random.choice(data_size, data_size, replace=False)
-    epoch = 0
-    while epoch < 80:
-        if epoch%20 == 0:
-            print "Epoch:", epoch
+    epoch = 80
+
+    for e in range(epoch):
+        if e % 20 == 0:
+            print "Epoch:", e
         i = 0
-        while i < data_size:    # Loops every batch size
+        for i in range(0, n, batch_size):    # Loops every batch size
             data_batch = training_data[random_indexes[i: i+batch_size]]
             label_batch = training_labels[random_indexes[i: i+batch_size]]
 
             #Performing forward 
-            yhat, activation_list = forward(weights, biases, data_batch)
+            yhat, z, activation_list = forward(weights, biases, data_batch)
 
             #Perfoming backward
-            delta_w, delta_b = backward(weights, biases, input_hidden_layers, batch_size, yhat, activation_list, data_batch, label_batch)
+            delta_w, delta_b = backward(weights, biases, input_hidden_layers, batch_size, yhat, activation_list, data_batch, label_batch, z)
 
             # Update weights and biases    
             weights, biases = update_variables(weights, biases, delta_w, delta_b, epsilon)
-            i = i + 1
-        epoch = epoch + 1
 
     return weights, biases
-
-
-
-
-"""
-
-def train(training_data, training_labels, layer_count, unit_count, batch_size, alpha):
-    input_hidden_layers = layer_count - 1
-    weights = init_weights(input_hidden_layers, unit_count, training_labels)
-    #print "weight size", len(weights)   
-    biases = init_biases(input_hidden_layers, unit_count, training_labels)
-    #print "bias size", len(biases)
-    epsilon = 0.01
-    data_size = training_data.shape[0]
-    random_indexes = np.random.choice(data_size, data_size, replace=False)
-    epoch = 0
-    while epoch < 80:
-        if epoch%20 == 0:
-            print "Epoch:", epoch
-        i = 0
-        while i < data_size:    # Loops every batch size
-            data_batch = training_data[random_indexes[i: i+batch_size]]
-            label_batch = training_labels[random_indexes[i: i+batch_size]]
-
-            #Performing forward 
-            yhat, activation_list = forward(weights, biases, data_batch)
-            #print "size of activation list", len(activation_list)
-
-            #Perfoming backward
-            #g = compute_dL_dyhat(label_batch, yhat)
-            delta_w = []
-            delta_b = []
-            g = yhat - label_batch
-            #g = np.dot(compute_dz_dw(layer_index, activation_list).T, g)
-            #print "length of A", len(activation_list)
-            #print activation_list[0].shape
-            #print activation_list[1].shape
-            #print activation_list[2].shape
-            #print activation_list[3].shape
-            #print "len of W", len(weights)
-            dL_dw = np.dot(g.T, compute_dz_dw(input_hidden_layers-1, activation_list))
-            dL_db = np.mean(g, axis=0)
-            delta_w.append(dL_dw)
-            delta_b.append(dL_db)
-            #print "dimension of g", g.shape
-            #print "dw outside of loop", dL_dw.shape
-            #print "shape of last activation", activation_list[input_hidden_layers-1].shape
-            #print "len of acitvation", len(activation_list)
-            #weights[input_hidden_layers-1] -= epsilon * dL_dw.T
-            #biases[input_hidden_layers-1] -= epsilon * dL_db
-            #print "first weight shape", weights[input_hidden_layers-1].shape
-            
-            j = input_hidden_layers-1
-            while j >= 1: # Starting from one before last layer
-                #print "##########################################"
-                #print "j", j
-                #print "w shape before", weights[j-1].shape
-                #print "w shape", weights[j].shape
-                #print "w shape after", weights[j+1].shape
-                #print "g before", g.shape
-                #print "relu prime one after", relu_prime(j+1, activation_list).shape
-                #print "relu prime", relu_prime(j, activation_list).shape
-                #print "relu prime one before", relu_prime(j-1, activation_list).shape
-                g = np.dot(g, weights[j].T) * relu_prime(j, activation_list)
-                #print "g after", g.shape
-                #print "shape of A[j-1]", activation_list[j-1].shape
-                dL_dw = np.dot(g.T, activation_list[j-1])
-                dL_db = np.mean(g, axis=0)
-                #print "dL_db", dL_db.shape
-                delta_w.append(dL_dw)
-                delta_b.append(dL_db)
-                #weights[j-1] = weights[j-1] - (dL_dw.T * epsilon)
-                #biases[j-1] = biases[j-1] - (dL_db * epsilon)
-                
-                j = j - 1
-            
-            k = 0
-            for k in range(len(weights)):
-                weights[k] -= epsilon * delta_w[len(weights)-1-k].T
-                biases[k] -= epsilon * delta_b[len(biases)-1-k]
-                #print np.linalg.norm(weights[k])
-                print weights[k]
-                print biases[k]
-
-            i = i + 1
-
-        epoch = epoch + 1
-    
-    return weights, biases
-"""
-
-
-# Reports the cost for both training data and validation data by running the cost function (loss)
-# Inputs: weights w, training data, training labels, validation data, validation labels, alpha,   Output: weight
-def reportCosts (w, training_data, training_labels, validation_data, validation_labels, alpha = 0.):
-    print "Training cost: {}".format(loss(w, training_data, training_labels, alpha))
-    print "Validation cost:  {}".format(loss(w, validation_data, validation_labels, alpha))
-
 
 
 def accuracy(weights, biases, testing_data, testing_labels):
@@ -301,7 +184,7 @@ def accuracy(weights, biases, testing_data, testing_labels):
     Input: Initialized weights and biases, testing data, testing labels
     Output: The calculated accuracy of predictions compared to the labels
     """
-    predictions, activation_lsit = forward(weights, biases, testing_data)
+    predictions, _, _ = forward(weights, biases, testing_data)
     accuracy_counter = 0.0
     for row_index in range(len(predictions)):
         if np.argmax(predictions[row_index]) == np.argmax(testing_labels[row_index]):
@@ -321,12 +204,11 @@ if __name__== "__main__":
     validation_data = np.load("mnist_validation_images.npy")
     validation_labels = np.load("mnist_validation_labels.npy")
 
-    ALPHA = 1E-3
-    batch_size = 1000
+    batch_size = 128
     layer_count = 5
-    unit_count = 30
+    unit_count = 50
 
-    weights, biases = train(training_data, training_labels, layer_count, unit_count, batch_size, ALPHA)
+    weights, biases = train(training_data, training_labels, layer_count, unit_count, batch_size)
     #reportCosts(w, training_data, training_labels, validation_data, validation_labels, ALPHA)
     accuracy(weights, biases, validation_data, validation_labels)
 
