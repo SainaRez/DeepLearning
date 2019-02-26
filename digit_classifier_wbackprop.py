@@ -140,7 +140,7 @@ def update_variables(weights, biases, delta_w, delta_b, learning_rate):
     return weights, biases
 
 
-def train(training_data, training_labels, layer_count, unit_count, batch_size):
+def train(training_data, training_labels, layer_count, unit_count, epsilon, batch_size):
     """
     This function devides the data into batches and runs forward and backward propogation for each batch and updates the weights and the biases. 
     It repeats this process for the number of epochs
@@ -154,7 +154,6 @@ def train(training_data, training_labels, layer_count, unit_count, batch_size):
     weights = init_weights(m, input_hidden_layers, unit_count, training_labels) 
     biases = init_biases(input_hidden_layers, unit_count, training_labels)
 
-    epsilon = 0.1
     data_size = training_data.shape[0]
     random_indexes = np.random.choice(data_size, data_size, replace=False)
     epoch = 80
@@ -177,6 +176,37 @@ def train(training_data, training_labels, layer_count, unit_count, batch_size):
             weights, biases = update_variables(weights, biases, delta_w, delta_b, epsilon)
 
     return weights, biases
+
+
+def findBestHyperparameters(training_data, training_labels, validation_data, validation_labels, layers, batch):
+    """
+    Inputs: training data, training labels, validation data, validation labels, number of layers and number of batches
+    Ouput: Finds the best learning rate and number of hidden units
+    """
+    print "Finding the best hyper parameters ..."
+    accuracy_dict = {}
+    #batch_size = [128, 600, 1000]
+    learning_rate = [0.1, 0.01, 0.001]
+    hidden_units = [30, 50, 70]
+
+    #for batch in batch_size:
+    for rate in learning_rate:
+        for unit in hidden_units:
+            # First train the data
+            weights, biases = train(training_data, training_labels, layers, unit, rate, batch)
+            # Then find the accuracy on validation data
+            acc = accuracy(weights, biases, validation_data, validation_labels)
+            accuracy_dict[acc] = [rate, unit]
+
+    # We find the parameters corresponding to the highest accuracy
+    accuracy_keys = sorted(accuracy_dict.keys())
+    highest_acc = accuracy_keys[-1]
+    rate, unit = accuracy_dict[highest_acc]
+    print "Found the best hyper parameters !!!"
+    print "learning_rate:", rate, "unit:", unit
+    return rate, unit
+
+
 
 
 def accuracy(weights, biases, testing_data, testing_labels):
@@ -206,11 +236,15 @@ if __name__== "__main__":
 
     batch_size = 128
     layer_count = 5
-    unit_count = 50
+    #learning_rate = 0.1
+    #unit_count = 50
 
-    weights, biases = train(training_data, training_labels, layer_count, unit_count, batch_size)
-    #reportCosts(w, training_data, training_labels, validation_data, validation_labels, ALPHA)
-    accuracy(weights, biases, validation_data, validation_labels)
+    # To run this neural net faster, directly pass in the learning rate and unit_count without calling find_hyperparameter()
+  
+    learning_rate, unit_count = findBestHyperparameters(training_data, training_labels, validation_data, validation_labels, layer_count, batch_size)
+
+    weights, biases = train(training_data, training_labels, layer_count, unit_count, learning_rate, batch_size)
+    accuracy(weights, biases, testing_data, testing_labels)
 
 
 
