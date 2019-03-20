@@ -24,11 +24,35 @@ def pre_process(train_images, train_lables, test_images, test_labels):
 def build_model(train_images, train_labels, test_images, test_labels):
     model = keras.Sequential([
         keras.layers.Flatten(input_shape=(28, 28)),
-        keras.layers.Dense(128, activation=tf.nn.relu),
+        keras.layers.Dense(256, activation=tf.nn.relu),
+        keras.layers.Dense(256, activation=tf.nn.relu),
         keras.layers.Dense(10, activation=tf.nn.softmax)
     ])
     model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['accuracy'])
     return model
+
+def CNN_model(train_images, train_labels, test_images, test_labels):
+    model = keras.Sequential()
+    model.add(keras.layers.Conv2D(fiflters=64, kernel_size=2, 
+                                    padding='same', activation='relu', input_shape=(28,28,1)))
+    model.add(keras.layers.MaxPooling2D(pool_size=2))
+    model.add(keras.layers.Dropout(0.3))
+
+    model.add(keras.layers.Conv2D(filters=32, kernel_size=2, 
+                                    padding='same', activation='relu'))
+    model.add(keras.layers.MaxPooling2D(pool_size=2))
+    model.add(keras.layers.Dropout(0.3))
+
+    model.add(keras.layers.Flatten())
+    model.add(keras.layers.Dense(256, activatoin='relu'))
+    model.add(keras.layers.Dropout(0.5))
+    model.add(keras.layers.Dense(10, activation='softmax'))
+
+    model.summary()
+    return model
+
+
+
 
 def plot_image(i, predictions_array, true_label, img):
   predictions_array, true_label, img = predictions_array[i], true_label[i], img[i]
@@ -71,10 +95,6 @@ if __name__ == "__main__":
     class_names = ['T-shirt/top', 'Trouser', 'Pullover', 'Dress', 'Coat', 
                 'Sandal', 'Shirt', 'Sneaker', 'Bag', 'Ankle boot']
     
-    print "training data size:", train_images.shape
-    print "training labels size:", train_labels.shape
-    
-    
     """
     plt.figure()
     plt.imshow(train_images[0])
@@ -85,10 +105,12 @@ if __name__ == "__main__":
 
     train_images, train_labels, test_images, test_labels = pre_process(train_images, train_labels, test_images, test_labels)
 
-    model = build_model(train_images, train_labels, test_images, test_labels)
-    model.fit(train_images, train_labels, epochs=1)
-    test_loss, test_acc = model.evaluate(test_images, test_labels)
-    print "TEST LOSS:", test_loss, "TEST ACCURACY:", test_acc
+    #model = build_model(train_images, train_labels, test_images, test_labels)
+    model = CNN_model(train_images, train_labels, test_images, test_labels)
+    print "Epochs:", "10", "Batch size:", "1000"
+    model.fit(train_images, train_labels, epochs=10)
+    test_loss, test_acc = model.evaluate(x=test_images, y=test_labels, batch_size=1000)
+    print "TEST ACCURACY:", test_acc*100.0
 
     predictions = model.predict(test_images)
 
