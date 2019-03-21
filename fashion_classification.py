@@ -19,13 +19,6 @@ def pre_process(train_images, train_labels, test_images, test_labels):
         plt.xlabel(class_names[train_labels[i]])
     plt.show()
 
-    """
-    validation_images = train_images[50000:60001]
-    train_images = train_images[0:50001]
-    validation_labels = train_labels[50000:60001]
-    train_labels = train_labels[0:50001]
-    """
-
     return train_images, train_labels, test_images, test_labels
 
 
@@ -170,7 +163,6 @@ if __name__ == "__main__":
   plt.grid(False)
   plt.show()
   """
-
     train_images, train_labels, test_images, test_labels = pre_process(
         train_images, train_labels, test_images, test_labels)
 
@@ -183,31 +175,3 @@ if __name__ == "__main__":
     calc_cnn_accuracy(train_images, train_labels,
                       test_images, test_labels, batch_size)
 
-    """
-  model = build_model()
-  print "Epochs:", "10", "Batch size:", "1000"
-  model.fit(train_images, train_labels, epochs=10)
-  test_loss, test_acc = model.evaluate(x=test_images, y=test_labels, batch_size=1000)
-  print "TEST ACCURACY:", test_acc*100.0
-
-  predictions = model.predict(test_images)
-
-  num_rows = 5
-  num_cols = 3
-  num_images = num_rows*num_cols
-  plt.figure(figsize=(2*2*num_cols, 2*num_rows))
-  for i in range(num_images):
-      plt.subplot(num_rows, 2*num_cols, 2*i+1)
-      plot_image(i, predictions, test_labels, test_images)
-      plt.subplot(num_rows, 2*num_cols, 2*i+2)
-      plot_value_array(i, predictions, test_labels)
-  plt.show()
-
-  cnn_model = CNN_model()
-  cnn_model.fit(train_images, train_labels, batch_size=64, epochs=10, validation_data=(x_valid, y_valid),
-        callbacks=[checkpointer])
-  
-  cnn_model = CNN_model()
-  score = cnn_model.evaluate(test_images, test_labels, verbose=0)
-  print 'Test accuracy:', score[1]
-  """
