@@ -19,14 +19,21 @@ from IPython import display
 
 class Data:
 
-    def __init__(self, data_path):
+    def __init__(self, data_path, batch):
         self.path = data_path
+        self.batch_size = batch
         
         #self.files_ds = None
         self.waveform_dataset = None
+        #self.spectrogram_dataset = None
+
+        self.train_dataset = None
+        self.validation_dataset = None
+        self.test_dataset = None
         
         self.load_data = self.LoadData()
         self.preprocess_data = self.PreprocessData()
+
         
 
 
@@ -42,6 +49,36 @@ class Data:
         self.load_data.divide_data()
         self.load_data.get_audio_label_pairs()
         self.waveform_dataset = self.load_data.waveform_ds
+        self.load_data.vis_audio_sample()
+        self.validation_dataset = self.load_data.val_files
+        self.test_dataset = self.load_data.test_files
+
+
+    def preprocess_data_wrapper(self):
+        self.preprocess_data.wave_dataset = self.waveform_dataset
+        self.preprocess_data.classes = self.load_data.classes
+        #Plotting some data about spectrogram
+        self.preprocess_data.plot_wave_spectrogram()
+        
+        self.preprocess_data.create_spect_dataset()
+        self.preprocess_data.vis_spect_sample()
+        self.train_dataset = self.preprocess_data.spectrogram_ds
+
+    def preprocess_dataset(self, files):
+            files_ds = tf.data.Dataset.from_tensor_slices(files)
+            output_ds = files_ds.map(self.load_data.get_waveform_and_label, num_parallel_calls=self.preprocess_data.AUTOTUNE)
+            output_ds = output_ds.map(self.preprocess_data.get_spectrogram_and_label_id,  num_parallel_calls=self.preprocess_data.AUTOTUNE)
+            return output_ds
+
+    def preprocess_validation(self, val_data):
+        self.validation_dataset = self.preprocess_dataset(val_data)
+        #val_ds = val_ds.batch(self.batch_size)
+        #val_ds = val_ds.cache().prefetch(self.preprocess_data.AUTOTUNE)
+
+    def preprocess_test(self, test_data):
+        self.test_dataset = self.preprocess_dataset(test_data)
+
+
 
                 
 
@@ -60,6 +97,7 @@ class Data:
 
             self.files_ds = None
             self.waveform_ds = None
+            
             
 
         # This function gets the data from the given path. If the path doesn't exist, it downloads it from the given url
@@ -132,6 +170,8 @@ class Data:
             self.files_ds = tf.data.Dataset.from_tensor_slices(self.train_files)
             print("the datatset: ", self.files_ds)
             self.waveform_ds = self.files_ds.map(self.get_waveform_and_label, num_parallel_calls=AUTOTUNE)
+
+        def vis_audio_sample(self):
             
             # Examine a few of the data with their labels
             rows = 3
@@ -153,146 +193,180 @@ class Data:
 
     # Class to preprocess the data
     class PreprocessData:
+        
         def __init__(self):
-            self.spectrogram = None
-            self.equal_length = None
+            self.classes = None
+            self.AUTOTUNE = tf.data.AUTOTUNE
 
-        # def add_padding_to_audio(waveform):
-        #     # Padding for files with less than 16000 samples
-        #     zero_padding = tf.zeros([16000] - tf.shape(waveform), dtype=tf.float32)
-
-        #     # Concatenate audio with padding so that all audio clips will be of the
-        #     # same length
-        #     waveform = tf.cast(waveform, tf.float32)
-
-        #     # adding the padding at the end of the data
-        #     self.equal_length = tf.concat([waveform, zero_padding], 0)
-        #     return
-
-
-    #     # Converting the files to spectrogram, data shape = (124, 129)
-    #     def get_spectrogram(waveform):
-    #         # Padding for files with less than 16000 samples
-    #         zero_padding = tf.zeros([16000] - tf.shape(waveform), dtype=tf.float32)
-
-    #         # Concatenate audio with padding so that all audio clips will be of the
-    #         # same length
-    #         waveform = tf.cast(waveform, tf.float32)
-
-    #         # adding the padding at the end of the data
-    #         equal_length = tf.concat([waveform, zero_padding], 0)
-
-    #         # stft splits the signal into windows of time and runs a Fourier transform on each window
-    #         self.spectrogram = tf.signal.stft(
-    #             equal_length, frame_length=255, frame_step=128)
-
-    #         # stft returns magnitude and phase and we only use magnitude (tf.abs)
-    #         self.spectrogram = tf.abs(self.spectrogram)
-
-    #         return spectrogram
-
-    # def spectrogram_wrapper():
-    #     for waveform, label in waveform_ds.take(10):
-    #         label = label.numpy().decode('utf-8')
-    #         spectrogram = get_spectrogram(waveform)
-
-    #     print('Label:', label)
-    #     print('Waveform shape:', waveform.shape)
-    #     print('Spectrogram shape:', spectrogram.shape)
-    #     print('Audio playback')
-    #     display.display(display.Audio(waveform, rate=16000))
+            self.spectrogram_ds = None
+            self.wave_dataset = None
 
         
+        def add_padding_to_audio(self, waveform):
+            # Padding for files with less than 16000 samples
+            zero_padding = tf.zeros([16000] - tf.shape(waveform), dtype=tf.float32)
+
+            # Concatenate audio with padding so that all audio clips will be of the
+            # same length
+            waveform = tf.cast(waveform, tf.float32)
+
+            # adding the padding at the end of the data
+            equal_length_waves = tf.concat([waveform, zero_padding], 0)
+            return equal_length_waves
+
+
+        # def create_equal_waveform_dataset(self):
+        #     AUTOTUNE = tf.data.AUTOTUNE
+        #     self.equal_waveform_ds = waveform_ds.map(self.get_spectrogram_and_label_id, num_parallel_calls=AUTOTUNE)
         
-    #     # Plot the spectogram in the log scale and plot the wav file
-    #     def plot_spectrogram(ax):
-    #         # Convert to frequencies to log scale and transpose so that the time is
-    #         # represented in the x-axis (columns).
-    #         log_spec = np.log(self.spectrogram.T)
-    #         #print("This is log spec: ", log_spec)
-    #         # print("##############", log_spec.shape)   #(129, 124)
-    #         height = log_spec.shape[0]    # 129
-    #         X = np.arange(16000, step=height + 1)
-    #         Y = range(height)
-    #         ax.pcolormesh(X, Y, log_spec)
+              
+        # Converting the files to spectrogram, data shape = (124, 129)
+        def get_spectrogram(self, waveform):
 
-    # def create_plot():
-    #     fig, axes = plt.subplots(2, figsize=(12, 8))
-    #     timescale = np.arange(waveform.shape[0])
-    #     axes[0].plot(timescale, waveform.numpy())
-    #     axes[0].set_title('Waveform')
-    #     axes[0].set_xlim([0, 16000])
-    #     plot_spectrogram(spectrogram.numpy(), axes[1])
-    #     axes[1].set_title('Spectrogram')
-    #     plt.show()
+            equal_length_waves = self.add_padding_to_audio(waveform)
 
+            # stft splits the signal into windows of time and runs a Fourier transform on each window
+            spectrogram = tf.signal.stft(equal_length_waves, frame_length=255, frame_step=128)
 
-    #     # Transform the waveform dataset to have spectrogram images and their corresponding labels as integer IDs
-    #     def get_spectrogram_and_label_id(audio, label):
-    #         #get_spectrogram()
-    #         spectrogram = get_spectrogram(audio)
+            # stft returns magnitude and phase and we only use magnitude (tf.abs)
+            spectrogram = tf.abs(spectrogram)
+            return spectrogram
 
-    #         # Adding a 1 at the end of the array (axis -1)
-    #         spectrogram = tf.expand_dims(spectrogram, -1)
-    #         # Not sure what is going on here??
-    #         label_id = tf.argmax(label == commands)
-    #         return spectrogram, label_id
+        def spectrogram_stats(self):
+            for waveform, label in self.wave_dataset.take(10):
+                label = label.numpy().decode('utf-8')
+                spectrogram = self.get_spectrogram(waveform)
 
+            print('Label:', label)
+            print('Waveform shape:', waveform.shape)
+            print('Spectrogram shape:', spectrogram.shape)
+            print('Audio playback')
+            display.display(display.Audio(waveform, rate=16000))
+            return spectrogram, waveform
 
-    #     def spect_label_wrapper():
-    #         spectrogram_ds = waveform_ds.map(
-    #         get_spectrogram_and_label_id, num_parallel_calls=AUTOTUNE)
+            
+        # Plot the spectogram in the log scale and plot the wav file
+        def plot_spectrogram(self, spectrogram, ax):
+            # Convert to frequencies to log scale and transpose so that the time is
+            # represented in the x-axis (columns).
+            log_spec = np.log(spectrogram.T)
+            # log_spec.shape = (129, 124)
+            height = log_spec.shape[0]    # 129
+            X = np.arange(16000, step=height + 1)
+            Y = range(height)
+            ax.pcolormesh(X, Y, log_spec, shading='auto')
 
 
-    #         # Examine the spectrogram images from the spectrogram_ds for different samples (9 in this case)
-    #         rows = 3
-    #         cols = 3
-    #         n = rows*cols
-    #         fig, axes = plt.subplots(rows, cols, figsize=(10, 10))
-    #         for i, (spectrogram, label_id) in enumerate(spectrogram_ds.take(n)):
-    #             r = i // cols
-    #             c = i % cols
-    #             ax = axes[r][c]
-    #             plot_spectrogram(np.squeeze(spectrogram.numpy()), ax)
-    #             ax.set_title(commands[label_id.numpy()])
-    #             ax.axis('off')
 
-    #         plt.show()
+        def plot_wave_spectrogram(self):
+            spectrogram, waveform = self.spectrogram_stats()
+            fig, axes = plt.subplots(2, figsize=(12, 8))
+            timescale = np.arange(waveform.shape[0])
+            axes[0].plot(timescale, waveform.numpy())
+            axes[0].set_title('Waveform')
+            axes[0].set_xlim([0, 16000])
+            self.plot_spectrogram(spectrogram.numpy(), axes[1])
+            axes[1].set_title('Spectrogram')
+            plt.show()
 
 
-    #     # Running the same preprocessing steps on the validation and test data
-    #     def preprocess_dataset(files):
-    #         files_ds = tf.data.Dataset.from_tensor_slices(files)
-    #         output_ds = files_ds.map(get_waveform_and_label,
-    #                                 num_parallel_calls=AUTOTUNE)
-    #         output_ds = output_ds.map(
-    #             get_spectrogram_and_label_id,  num_parallel_calls=AUTOTUNE)
-    #         return output_ds
+        # Transform the waveform dataset to have spectrogram images and their corresponding labels as integer IDs
+        def get_spectrogram_and_label_id(self, audio, label):
+            spectrogram = self.get_spectrogram(audio)
 
-    #     def preprocess_test_val():
+            # Adding a 1 at the end of the array (axis -1)
+            spectrogram = tf.expand_dims(spectrogram, -1)
+            # Not sure what is going on here??
+            label_id = tf.argmax(label == self.classes)
+            return spectrogram, label_id
 
-    #         train_ds = spectrogram_ds
-    #         val_ds = preprocess_dataset(val_files)
-    #         test_ds = preprocess_dataset(test_files)
 
-    #         # Divide each set of data into 64 batches
-    #         batch_size = 64
-    #         train_ds = train_ds.batch(batch_size)
-    #         val_ds = val_ds.batch(batch_size)
+        def create_spect_dataset(self):
+            self.spectrogram_ds = self.wave_dataset.map(self.get_spectrogram_and_label_id, num_parallel_calls=self.AUTOTUNE)
 
-    #         # Add dataset cache() and prefetch() operations to reduce read latency while training the model (????)
-    #         train_ds = train_ds.cache().prefetch(AUTOTUNE)
-    #         val_ds = val_ds.cache().prefetch(AUTOTUNE)
+            
+        def vis_spect_sample(self):   
+            # Examine the spectrogram images from the spectrogram_ds for different samples (9 in this case)
+            rows = 3
+            cols = 3
+            n = rows*cols
+            fig, axes = plt.subplots(rows, cols, figsize=(10, 10))
+            for i, (spectrogram, label_id) in enumerate(self.spectrogram_ds.take(n)):
+                r = i // cols
+                c = i % cols
+                ax = axes[r][c]
+                self.plot_spectrogram(np.squeeze(spectrogram.numpy()), ax)
+                ax.set_title(self.classes[label_id.numpy()])
+                ax.axis('off')
 
-    #         # a cnn model is used for running convolutions on the images
-    #         # Two additional layers are added
-    #         # Resizing: downsamples the data to allow the model to train faster
-    #         # Normalization: layer to normalize the value of each pixel in the image based on its mean and standard deviation
+            plt.show()
 
-    #         for spectrogram, _ in spectrogram_ds.take(1):
-    #             input_shape = spectrogram.shape
-    #         print('Input shape:', input_shape)
-    #         num_labels = len(commands)
+
+class Model:
+
+    def __init__(self):
+        self.train_data = None
+        self.val_data = None
+        self.test_data = None
+        
+        self.optimizer = None
+        self.EPOCHS = None
+        
+        self.history = None
+
+    
+
+    class CNN:
+        def __init__(self, optimizer_type, epoch_num):
+            self.model = None
+
+
+        def create_model():
+            # The adapt method, when called on the training data, calculates mean and standard deviation
+            norm_layer = preprocessing.Normalization()
+            norm_layer.adapt(spectrogram_ds.map(lambda x, _: x))
+
+            # Add all the layers
+            input_ = layers.Input(shape=input_shape)  # (129, 124)
+            resize = preprocessing.Resizing(32, 32)(input_)
+            norm_layer = norm_layer(resize)
+            conv1 = layers.Conv2D(32, 3, activation='relu')(norm_layer)
+            pooling_1 = layers.MaxPooling2D()(conv1)
+            conv2 = layers.Conv2D(64, 3, activation='relu')(pooling_1)
+            pooling_2 = layers.MaxPooling2D()(conv2)
+            dropout_1 = layers.Dropout(0.25)(pooling_2)
+            flatten = layers.Flatten()(dropout_1)
+            dense_1 = layers.Dense(128, activation='relu')(flatten)
+            dropout_2 = layers.Dropout(0.5)(dense_1)
+            output_ = layers.Dense(num_labels)(dropout_2)
+
+
+            # build the model
+            self.model = tf.keras.Model(inputs=input_, outputs=output_)
+            self.model.summary()
+
+
+        def fit_model():
+            # Compile and fit the model
+            self.model.compile(optimizer=tf.keras.optimizers.Adam(), 
+            loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True), metrics=['accuracy'])
+
+            EPOCHS = 10
+            self.history = self.model.fit(train_ds, validation_data=val_ds, epochs=EPOCHS,
+                                callbacks=tf.keras.callbacks.EarlyStopping(verbose=1, patience=2))
+
+            return
+
+        def vis_model_history():
+            metrics = self.history.history
+            plt.plot(history.epoch, metrics['loss'], metrics['val_loss'])
+            plt.legend(['loss', 'val_loss'])
+            plt.show()
+
+
+    class RNN:
+        def __init__(self):
+            pass
 
 
 
@@ -300,7 +374,9 @@ class Data:
 if __name__=="__main__":
     
     path = 'data/mini_speech_commands'
-    data = Data(path)
+    data = Data(path, 64)
     data.random_seed()
     data.load_data_wrapper()
-
+    data.preprocess_data_wrapper()
+    data.preprocess_validation(data.validation_dataset)
+    data.preprocess_test(data.test_dataset)
