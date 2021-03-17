@@ -314,8 +314,18 @@ class Model:
         
         self.history = None
 
-    
+        self.cnn = CNN()
+        self.rnn = RNN()
 
+    def set_data(self, train, val, test):
+        self.train_data = train
+        self.val_data = val
+        self.test_data = test
+
+    def run_model():
+        self.cnn.create_model()
+        self.cnn.fit_model()
+    
     class CNN:
         def __init__(self, optimizer_type, epoch_num):
             self.model = None
