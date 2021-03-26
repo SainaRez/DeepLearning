@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import h5py
 
 from tensorflow_datasets.core import lazy_imports_lib
 import tensorflow_datasets.public_api as tfds
@@ -58,7 +59,7 @@ class Data:
         self.preprocess_data.wave_dataset = self.waveform_dataset
         self.preprocess_data.classes = self.load_data.classes
         #Plotting some data about spectrogram
-        self.preprocess_data.plot_wave_spectrogram()
+        self.preprocess_data.vis_wave_spectrogram()
         
         self.preprocess_data.create_spect_dataset()
         self.preprocess_data.vis_spect_sample()
@@ -70,13 +71,17 @@ class Data:
             output_ds = output_ds.map(self.preprocess_data.get_spectrogram_and_label_id,  num_parallel_calls=self.preprocess_data.AUTOTUNE)
             return output_ds
 
-    def preprocess_validation(self, val_data):
-        self.validation_dataset = self.preprocess_dataset(val_data)
-        #val_ds = val_ds.batch(self.batch_size)
-        #val_ds = val_ds.cache().prefetch(self.preprocess_data.AUTOTUNE)
+    def preprocess_train(self):
+        self.train_dataset = self.train_dataset.batch(self.batch_size)
+        self.train_dataset = self.train_dataset.cache().prefetch(self.preprocess_data.AUTOTUNE)
+    
+    def preprocess_validation(self):
+        self.validation_dataset = self.preprocess_dataset(self.validation_dataset)
+        self.validation_dataset = self.validation_dataset.batch(self.batch_size)
+        self.validation_dataset = self.validation_dataset.cache().prefetch(self.preprocess_data.AUTOTUNE)
 
-    def preprocess_test(self, test_data):
-        self.test_dataset = self.preprocess_dataset(test_data)
+    def preprocess_test(self):
+        self.test_dataset = self.preprocess_dataset(self.test_dataset)
 
 
 
@@ -258,7 +263,7 @@ class Data:
 
 
 
-        def plot_wave_spectrogram(self):
+        def vis_wave_spectrogram(self):
             spectrogram, waveform = self.spectrogram_stats()
             fig, axes = plt.subplots(2, figsize=(12, 8))
             timescale = np.arange(waveform.shape[0])
@@ -302,42 +307,82 @@ class Data:
             plt.show()
 
 
-class Model:
+class Network:
 
     def __init__(self):
         self.train_data = None
         self.val_data = None
         self.test_data = None
+        self.classes = None
+
         
         self.optimizer = None
+        self.loss = None
         self.EPOCHS = None
+        self.input_shape = None
         
         self.history = None
 
-        self.cnn = CNN()
-        self.rnn = RNN()
+        self.cnn = self.CNN(self)
+        self.rnn = self.RNN()
 
-    def set_data(self, train, val, test):
+    def set_data(self, train, val, test, classes):
         self.train_data = train
         self.val_data = val
         self.test_data = test
+        self.classes = classes
+        for sound, label in self.train_data.take(1):
+            self.input_shape = sound[0].shape
+        print('Input shape:', self.input_shape)
 
-    def run_model():
+    def run_model(self):
         self.cnn.create_model()
         self.cnn.fit_model()
     
+    
+    def predict(self):
+        test_audio = []
+        test_labels = []
+
+        for audio, label in self.test_data:
+            test_audio.append(audio.numpy())
+            test_labels.append(label.numpy())
+
+        test_audio = np.array(test_audio)
+        test_labels = np.array(test_labels)
+
+        pred = self.cnn.model.predict(test_audio)
+        y_pred = np.argmax(pred, axis=1)
+        y_true = test_labels
+
+
+        test_acc = sum(y_pred == y_true) / len(y_true)
+        print(f'Test set accuracy: {test_acc:.0%}')
+        return y_pred, y_true
+
+    def confusion_matrix(self, y_pred, y_true):
+        confusion_mtx = tf.math.confusion_matrix(y_true, y_pred)
+        plt.figure(figsize=(10, 8))
+        sns.heatmap(confusion_mtx, xticklabels=self.classes, yticklabels=self.classes,
+                    annot=True, fmt='g')
+        plt.xlabel('Prediction')
+        plt.ylabel('Label')
+        plt.show()
+
+    
     class CNN:
-        def __init__(self, optimizer_type, epoch_num):
+        def __init__(self, network_instance):
             self.model = None
+            self.network_instance = network_instance
 
 
-        def create_model():
+        def create_model(self):
             # The adapt method, when called on the training data, calculates mean and standard deviation
             norm_layer = preprocessing.Normalization()
-            norm_layer.adapt(spectrogram_ds.map(lambda x, _: x))
+            norm_layer.adapt(self.network_instance.train_data.map(lambda x, _: x))
 
             # Add all the layers
-            input_ = layers.Input(shape=input_shape)  # (129, 124)
+            input_ = layers.Input(shape=self.network_instance.input_shape)  # (124, 129, 1)
             resize = preprocessing.Resizing(32, 32)(input_)
             norm_layer = norm_layer(resize)
             conv1 = layers.Conv2D(32, 3, activation='relu')(norm_layer)
@@ -348,7 +393,7 @@ class Model:
             flatten = layers.Flatten()(dropout_1)
             dense_1 = layers.Dense(128, activation='relu')(flatten)
             dropout_2 = layers.Dropout(0.5)(dense_1)
-            output_ = layers.Dense(num_labels)(dropout_2)
+            output_ = layers.Dense(len(self.network_instance.classes))(dropout_2)
 
 
             # build the model
@@ -356,18 +401,17 @@ class Model:
             self.model.summary()
 
 
-        def fit_model():
+        def fit_model(self):
             # Compile and fit the model
             self.model.compile(optimizer=tf.keras.optimizers.Adam(), 
             loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True), metrics=['accuracy'])
 
-            EPOCHS = 10
-            self.history = self.model.fit(train_ds, validation_data=val_ds, epochs=EPOCHS,
+            self.history = self.model.fit(self.network_instance.train_data, validation_data=self.network_instance.val_data, epochs=self.network_instance.EPOCHS,
                                 callbacks=tf.keras.callbacks.EarlyStopping(verbose=1, patience=2))
 
             return
 
-        def vis_model_history():
+        def vis_model_history(self):
             metrics = self.history.history
             plt.plot(history.epoch, metrics['loss'], metrics['val_loss'])
             plt.legend(['loss', 'val_loss'])
@@ -388,5 +432,15 @@ if __name__=="__main__":
     data.random_seed()
     data.load_data_wrapper()
     data.preprocess_data_wrapper()
-    data.preprocess_validation(data.validation_dataset)
-    data.preprocess_test(data.test_dataset)
+    data.preprocess_train()
+    data.preprocess_validation()
+    data.preprocess_test()
+
+    network = Network()
+    network.optimizer = tf.keras.optimizers.Adam()
+    network.loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+    network.EPOCHS = 10
+    network.set_data(data.train_dataset, data.validation_dataset, data.test_dataset, data.load_data.classes)
+    network.run_model()
+    predicted_y, true_y = network.predict()
+    network.confusion_matrix(predicted_y, true_y)
